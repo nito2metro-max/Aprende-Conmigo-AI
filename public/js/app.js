@@ -7,7 +7,7 @@ import { generateEnglishProblem } from './english.js';
 import { coinsForAnswer, newBadges, BADGES, SHOP, buy } from './rewards.js';
 import { summarize, recommendations, recentAccuracy, SUBJECTS } from './stats.js';
 import { speak, stopSpeaking, configureSpeech, speechSupported, dictate, dictationSupported } from './speech.js';
-import { askTutor, checkAi } from './tutor.js';
+import { askTutor, aiReachable } from './tutor.js';
 import { GAMES, STARTERS } from './games.js';
 import { esc, $, toast, confetti, avatarHtml, ICONS } from './ui.js';
 
@@ -40,8 +40,10 @@ function say(text, opts) {
   return speak(text, opts);
 }
 
+let introActive = Boolean(document.getElementById('intro'));
+
 function autoSay(text, opts) {
-  if (state.settings.autoRead) say(text, opts);
+  if (state.settings.autoRead && !introActive) say(text, opts);
 }
 
 function go(name, params = {}) {
@@ -635,7 +637,7 @@ function renderHomework() {
       <p class="note" id="ai-note"></p>
     </section>`;
 
-  checkAi().then((ok) => {
+  aiReachable().then((ok) => {
     const note = $('#ai-note');
     if (note) note.textContent = ok ? '🤖 El tutor con IA está activado.' : '📚 Modo sin conexión: explico operaciones y palabras; las preguntas abiertas necesitan el tutor con IA.';
   });
@@ -1009,7 +1011,13 @@ app.addEventListener('click', (e) => {
   if (d.kid) { view.kid = d.kid; return render(); }
   if (d.deleteKid) {
     const kid = state.profiles.find((k) => k.id === d.deleteKid);
-    if (kid && window.confirm(`¿Seguro que quiere borrar el perfil de ${kid.name} y todo su progreso?`)) {
+    // Confirmación en la propia página: hay que tocar dos veces.
+    if (kid && t.dataset.armed !== 'yes') {
+      t.dataset.armed = 'yes';
+      t.textContent = `¿Seguro? Toque otra vez para borrar a ${kid.name} y todo su progreso`;
+      return;
+    }
+    if (kid) {
       state.profiles = state.profiles.filter((k) => k.id !== kid.id);
       if (state.activeId === kid.id) state.activeId = null;
       save();
@@ -1140,6 +1148,29 @@ for (const p of state.profiles) {
 if (profile()) view = { name: 'home' };
 else state.activeId = null;
 render();
+
+// Intro animada al abrir la app. Se cierra sola o al tocarla.
+function runIntro() {
+  const intro = document.getElementById('intro');
+  if (!intro) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    introActive = false;
+    intro.classList.add('leave');
+    setTimeout(() => intro.remove(), 650);
+    // El primer toque permite al navegador (iPhone incluido) empezar a hablar.
+    const p = profile();
+    autoSay(p ? `¡Hola, ${p.name}! ¿Qué quieres aprender hoy?` : '¡Hola! Soy Profe Búho. ¡Vamos a aprender jugando!');
+  };
+  intro.addEventListener('click', close);
+  intro.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') close(); });
+  intro.querySelector('.intro-skip')?.focus({ preventScroll: true });
+  setTimeout(close, reduce ? 1200 : 3600);
+}
+runIntro();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

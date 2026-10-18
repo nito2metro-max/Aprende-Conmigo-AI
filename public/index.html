@@ -8,6 +8,11 @@
   <meta name="theme-color" content="#7b5cf6">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aprende Conmigo">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -18,6 +23,24 @@
     <noscript>Aprende Conmigo AI necesita JavaScript para funcionar.</noscript>
   </main>
   <div id="toasts" class="toasts"></div>
+  <div id="intro" class="intro" role="dialog" aria-modal="true" aria-label="Bienvenida a Aprende Conmigo AI">
+    <div class="intro-deco" aria-hidden="true">
+      <span class="ib ib-a">A</span><span class="ib ib-b">B</span><span class="ib ib-c">C</span>
+      <span class="ib ib-1">1</span><span class="ib ib-2">2</span><span class="ib ib-3">3</span>
+      <span class="is is-1">⭐</span><span class="is is-2">✨</span><span class="is is-3">⭐</span><span class="is is-4">✨</span>
+    </div>
+    <div class="intro-center">
+      <div class="intro-owl" aria-hidden="true"><span class="intro-ring"></span>🦉</div>
+      <h1 class="intro-title">
+        <span class="intro-word"><span style="--i:0">A</span><span style="--i:1">p</span><span style="--i:2">r</span><span style="--i:3">e</span><span style="--i:4">n</span><span style="--i:5">d</span><span style="--i:6">e</span></span>
+        <span class="intro-word"><span style="--i:7">C</span><span style="--i:8">o</span><span style="--i:9">n</span><span style="--i:10">m</span><span style="--i:11">i</span><span style="--i:12">g</span><span style="--i:13">o</span></span>
+      </h1>
+      <span class="intro-ai">AI</span>
+      <p class="intro-tag">Tu profe personal para aprender jugando</p>
+      <div class="intro-bar" aria-hidden="true"><span></span></div>
+    </div>
+    <button class="intro-skip" type="button">Toca para empezar</button>
+  </div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

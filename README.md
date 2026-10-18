@@ -33,6 +33,15 @@ Pruebas:
 npm test
 ```
 
+## Verla en el iPhone
+
+1. Abre el enlace de la app en **Safari** (no en otro navegador).
+2. Toca el botón **Compartir** (el cuadrado con la flecha hacia arriba).
+3. Elige **Añadir a pantalla de inicio** y luego **Añadir**.
+
+Aparece el icono del búho 🦉 y la app se abre a pantalla completa con su intro.
+Para usar tu propio servidor (y tu clave de IA) desde el iPhone, despliega este repositorio en un servicio con HTTPS (por ejemplo Render o Railway con `npm start`) y abre esa dirección.
+
 ## Privacidad
 
 - Todo el progreso se guarda **sólo en el dispositivo** (localStorage).
