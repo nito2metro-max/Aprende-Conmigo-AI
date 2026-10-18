@@ -122,7 +122,6 @@ export function startMemory(root, { level, speak, onFinish, sfx = () => {} }) {
       a.btn.classList.add('matched');
       b.btn.classList.add('matched');
       sfx('correct');
-      speak(`${a.card.word.en}. ${a.card.word.es}`, { lang: 'en-US' });
       open = [];
       matched += 1;
       if (matched === words.length) {
@@ -197,12 +196,10 @@ export function startBalloons(root, { level, speak, onFinish, sfx = () => {} }) 
       score += 1;
       sfx('pop');
       btn.classList.add('pop');
-      speak('¡Muy bien!');
     } else {
       sfx('wrong');
       btn.classList.add('wrong');
       root.querySelector(`.balloon[data-w="${CSS.escape(target)}"]`)?.classList.add('right');
-      speak(`Era ${target}`);
     }
     timeout = setTimeout(next, 1300);
   });

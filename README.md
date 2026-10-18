@@ -7,7 +7,7 @@ Un profesor personal con inteligencia artificial para niños y niñas de 6 a 12 
 | Función | Cómo funciona |
 |---|---|
 | **Explica paso a paso** | Cada ejercicio tiene un "Paso a paso" que se muestra de uno en uno (sumas llevando, restas pidiendo prestado, tablas, divisiones, problemas). Si el niño falla, la explicación se abre sola. |
-| **Lee en voz alta** | Las preguntas se leen automáticamente con la voz del navegador. Las lecturas resaltan cada palabra mientras se leen y las palabras en inglés usan voz inglesa. |
+| **Lee en voz alta** | La voz habla sola sólo en momentos clave: el saludo al abrir la app, las preguntas de las lecciones, las reglas de los juegos, al subir de nivel y el resumen al terminar una lección. Todo lo demás (pasos, cuentos, respuestas de Profe Búho, medallas) se escucha tocando 🔊. Las lecturas resaltan cada palabra y el inglés usa voz inglesa. |
 | **Se adapta al nivel** | 5 niveles por materia (Semillita → Bosque). Empieza según la edad, sube tras 3 aciertos seguidos y baja tras 2 fallos, para no frustrar ni aburrir. |
 | **Juegos y recompensas** | 3 juegos (Carrera de cohetes, Memoria en inglés, Globos de palabras), estrellas, monedas, 12 medallas y una tienda de personajes, sombreros y pegatinas. |
 | **Ayuda con la tarea** | El niño escribe (o dicta) su tarea y el tutor con IA (Claude) se la explica paso a paso y le propone un ejercicio parecido. |

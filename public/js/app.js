@@ -52,6 +52,9 @@ function say(text, opts) {
 
 let introActive = Boolean(document.getElementById('intro'));
 
+// La app sólo habla sola en momentos clave: el saludo al abrir, las
+// preguntas de las lecciones, las reglas de los juegos, al subir de nivel y
+// el resumen al terminar una lección. Todo lo demás se escucha tocando 🔊.
 function autoSay(text, opts) {
   if (state.settings.autoRead && !introActive) say(text, opts);
 }
@@ -136,7 +139,6 @@ function renderProfiles() {
       </div>
       <button class="link-btn" data-go="parents">👨‍👩‍👧 Zona de padres</button>
     </section>`;
-  if (view.sheet) autoSay('¿Quién va a aprender hoy?');
 }
 
 function renderNewProfile() {
@@ -166,7 +168,6 @@ function renderNewProfile() {
     save();
     go('home');
   });
-  autoSay('¿Cómo te llamas? Escribe tu nombre y elige tu personaje.');
 }
 
 // ---------- Inicio ----------
@@ -245,7 +246,6 @@ function renderHome() {
       <div class="cat-grid">${cats}</div>
     </section>
     ${bottomNav('home')}`;
-  autoSay(`¡Hola, ${p.name}! ¿Qué quieres aprender hoy?`);
 }
 
 function renderProfile() {
@@ -285,8 +285,6 @@ function renderProfile() {
       </div>
     </section>
     ${bottomNav('profile')}`;
-  const lv = Object.entries(SUBJECTS).map(([key, s]) => `${s.name}, nivel ${p.skills[key].level}`).join('; ');
-  autoSay(`Este es tu perfil, ${p.name}. Tienes ${p.stars} estrellas y ${p.coins} monedas. Tus niveles: ${lv}.`);
 }
 
 // ---------- Lecciones ----------
@@ -462,7 +460,7 @@ function showSteps(auto = false) {
   box.classList.remove('hidden');
   if (view.stepIndex < 0) view.stepIndex = 0;
   renderSteps();
-  if (auto || state.settings.autoRead) say(view.problem.steps[view.stepIndex]);
+  if (auto) say(view.problem.steps[view.stepIndex]);
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -506,7 +504,7 @@ function answer(value, btn) {
       setTimeout(() => {
         toast(`¡Subes al nivel ${skill.level}: ${LEVEL_NAMES[skill.level]}!`, '🌟');
         playSfx('levelUp');
-        say(`¡Felicidades! Subes al nivel ${skill.level}, ${LEVEL_NAMES[skill.level]}.`);
+        autoSay(`¡Felicidades! Subes al nivel ${skill.level}, ${LEVEL_NAMES[skill.level]}.`);
       }, 900);
     }
     if (changed === 'down') setTimeout(() => toast('Vamos a practicar con ejercicios un poco más fáciles. ¡Tú puedes!', '💪'), 600);
@@ -527,7 +525,6 @@ function answer(value, btn) {
     setTimeout(() => playSfx('coin'), 250);
     fb.innerHTML = `<p class="good">${firstTry ? '⭐' : '👍'} ${praise} <span class="earned">+${coins} 🪙</span></p>`;
     enableNext();
-    say(praise);
     if (firstTry) confetti(24);
   } else {
     btn.classList.add('wrong');
@@ -544,13 +541,11 @@ function answer(value, btn) {
       enableNext();
       view.stepIndex = pr.steps.length - 1;
       showSteps();
-      const spoken = pr.word ? `${pr.word.es}, que en inglés es ${pr.word.en}` : pr.answer;
-      say(`La respuesta era ${spoken}. ¡La próxima seguro que te sale!`);
     } else {
       const msg = ENCOURAGE[Math.floor(Math.random() * ENCOURAGE.length)];
       fb.innerHTML = `<p class="soft">💛 ${msg} Inténtalo otra vez.</p>`;
       highlightEvidence();
-      say(msg).then(() => showSteps(true));
+      showSteps();
     }
   }
 
@@ -581,7 +576,6 @@ function announceBadges() {
     toast(`¡Nueva medalla: ${b.name}!`, b.emoji);
     playSfx('badge');
     confetti();
-    say(`¡Ganaste una medalla nueva: ${b.name}!`);
   }, 1600 + i * 2200));
 }
 
@@ -596,14 +590,13 @@ async function aiExplain() {
   const reply = await askTutor({ question, subject: view.subject, level: p.skills[view.subject].level, age: p.age });
   if (!document.body.contains(box)) return;
   box.innerHTML = explanationHtml(reply);
-  say([reply.intro, ...reply.steps].join(' '));
 }
 
 function explanationHtml(reply) {
   return `
     <div class="explanation">
       ${reply.intro ? `<p class="intro">${esc(reply.intro)}</p>` : ''}
-      <ol class="step-list">${reply.steps.map((st) => `<li class="step"><span>${esc(st)}</span></li>`).join('')}</ol>
+      <ol class="step-list">${reply.steps.map((st, i) => `<li class="step"><span>${esc(st)}</span><button class="icon-btn small" data-say="${esc(st)}" aria-label="Escuchar el paso ${i + 1}">🔊</button></li>`).join('')}</ol>
       ${reply.answer ? `<p class="answer-box">✅ ${esc(reply.answer)}</p>` : ''}
       ${reply.tryIt ? `<p class="try-it">✏️ ${esc(reply.tryIt)}</p>` : ''}
       <p class="source">${reply.source === 'ai' ? '🤖 Explicación creada con IA' : '📚 Explicación de Profe Búho'}</p>
@@ -679,7 +672,6 @@ function renderHomework() {
       <p class="note" id="ai-note"></p>
     </section>`;
 
-  autoSay('Escribe tu tarea y te la explico paso a paso.');
   aiReachable().then((ok) => {
     const note = $('#ai-note');
     if (note) note.textContent = ok ? '🤖 El tutor con IA está activado.' : '📚 Modo sin conexión: explico operaciones y palabras; las preguntas abiertas necesitan el tutor con IA.';
@@ -724,8 +716,6 @@ function renderHomeworkSteps() {
       </div>
       <p class="source">${r.source === 'ai' ? '🤖 Explicación creada con IA. Si algo no cuadra, pregunta a tu maestro o a tu familia.' : '📚 Explicación de Profe Búho'}</p>
     </div>`;
-  const text = view.hwStep === 0 ? [r.intro, r.steps[0]].filter(Boolean).join(' ') : r.steps[view.hwStep];
-  autoSay(done && r.tryIt ? `${text} ${r.tryIt}` : text);
 }
 
 // ---------- Profe Búho IA ----------
@@ -808,7 +798,6 @@ function renderBuddy() {
     const st = $('#buddy-status');
     if (st) st.textContent = mode === 'offline' ? '📚 Modo sin conexión' : '🟢 IA conectada';
   });
-  if (chat.length === 1) autoSay(chat[0].content);
 }
 
 async function sendBuddy(preset) {
@@ -842,7 +831,6 @@ async function sendBuddy(preset) {
     msg.content = reply.text;
     msg.source = reply.source;
     playSfx('flip');
-    autoSay(reply.text);
   } catch (e) {
     msg.content = msg.content || (e?.code === 'cancelled' || e?.name === 'AbortError' ? 'Vale, paro aquí. ¿Qué más quieres saber?' : 'Uy, se me enredaron las plumas 🦉. ¿Me lo preguntas otra vez?');
   } finally {
@@ -872,7 +860,6 @@ function renderGames() {
       </div>
     </section>
     ${bottomNav('games')}`;
-  autoSay('¿A qué quieres jugar?');
 }
 
 function renderGame() {
@@ -921,7 +908,6 @@ function startGame() {
           </div>
         </div>`;
       refreshWallet();
-      say(`${result.title} ${result.message} Ganaste ${result.coins} monedas.`);
     },
   });
 }
@@ -966,7 +952,6 @@ function renderRewards() {
     </section>
     ${bottomNav('rewards')}`;
   if ((p.seenBadges || 0) < p.badges.length) updateProfile({ ...p, seenBadges: p.badges.length });
-  autoSay(`Tienes ${p.stars} estrellas, ${p.coins} monedas y ${p.badges.length} medallas. Toca una medalla para escuchar cómo se gana.`);
 }
 
 function buyItem(id) {
@@ -976,7 +961,6 @@ function buyItem(id) {
   if (!res.ok) {
     if (res.reason === 'coins') {
       toast(`Te faltan ${item.price - p.coins} monedas. ¡Sigue aprendiendo!`, '🪙');
-      say(`Te faltan ${item.price - p.coins} monedas. ¡Sigue aprendiendo!`);
     }
     return;
   }
@@ -987,7 +971,6 @@ function buyItem(id) {
   toast(`¡Conseguiste: ${item.name}!`, item.emoji);
   playSfx('coin');
   confetti();
-  say(`¡Conseguiste ${item.type === 'sticker' ? 'la pegatina' : 'el'} ${item.name}!`);
   render();
 }
 
