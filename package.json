@@ -1,0 +1,18 @@
+{
+  "name": "aprende-conmigo-ai",
+  "version": "1.0.0",
+  "description": "Profesor personal con inteligencia artificial para niños: matemáticas, lectura e inglés.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=21.7"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0"
+  }
+}

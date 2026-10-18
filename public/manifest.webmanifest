@@ -1,0 +1,11 @@
+{
+  "name": "Aprende Conmigo AI",
+  "short_name": "Aprende Conmigo",
+  "description": "Tu profesor personal con inteligencia artificial: matemáticas, lectura e inglés.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff8ec",
+  "theme_color": "#ff9f43",
+  "lang": "es",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
