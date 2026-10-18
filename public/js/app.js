@@ -9,7 +9,7 @@ import { summarize, recommendations, recentAccuracy, SUBJECTS } from './stats.js
 import { speak, stopSpeaking, configureSpeech, speechSupported, dictate, dictationSupported } from './speech.js';
 import { askTutor, checkAi } from './tutor.js';
 import { GAMES, STARTERS } from './games.js';
-import { esc, $, toast, confetti, avatarHtml } from './ui.js';
+import { esc, $, toast, confetti, avatarHtml, ICONS } from './ui.js';
 
 const SESSION_LENGTH = 8;
 const AVATARS = ['🐻', '🐰', '🐸', '🐵', '🐧', '🐯', '🐨', '🐙'];
@@ -60,30 +60,61 @@ function topBar({ back = 'home', title = '' } = {}) {
   const p = profile();
   return `
     <header class="topbar">
-      ${back ? `<button class="icon-btn" data-go="${back}" aria-label="Volver">⬅️</button>` : '<span></span>'}
+      ${back ? `<button class="round-btn" data-go="${back}" aria-label="Volver">${ICONS.back}</button>` : '<span></span>'}
       <h1 class="topbar-title">${esc(title)}</h1>
       ${p ? `<div class="wallet" aria-label="${p.stars} estrellas y ${p.coins} monedas"><span>⭐ ${p.stars}</span><span>🪙 ${p.coins}</span></div>` : '<span></span>'}
     </header>`;
 }
 
-// ---------- Perfiles ----------
+// ---------- Navegación inferior ----------
+
+const NAV = [
+  { go: 'home', label: 'Inicio', icon: 'home' },
+  { go: 'games', label: 'Juegos', icon: 'game' },
+  { go: 'rewards', label: 'Premios', icon: 'gift' },
+  { go: 'profile', label: 'Perfil', icon: 'user' },
+];
+
+function bottomNav(active) {
+  return `
+    <nav class="bottom-nav" aria-label="Menú principal">
+      ${NAV.map((n) => `<button class="nav-item ${n.go === active ? 'on' : ''}" data-go="${n.go}" ${n.go === active ? 'aria-current="page"' : ''}>${ICONS[n.icon]}<span>${n.label}</span></button>`).join('')}
+    </nav>`;
+}
+
+// ---------- Bienvenida y perfiles ----------
 
 function renderProfiles() {
   const cards = state.profiles
     .map((p) => `<button class="profile-card" data-pick="${p.id}">${avatarHtml(p, 'xl')}<span class="profile-name">${esc(p.name)}</span></button>`)
     .join('');
   app.innerHTML = `
-    <section class="screen center">
-      <div class="mascot bounce" aria-hidden="true">🦉</div>
-      <h1 class="brand">Aprende Conmigo <span>AI</span></h1>
-      <p class="lead">¡Hola! Soy Profe Búho. ¿Quién va a aprender hoy?</p>
+    <section class="hero">
+      <div class="hero-deco" aria-hidden="true">
+        <span class="deco abc">ABC</span><span class="deco ab">AB</span><span class="deco three">3</span><span class="deco b">B</span>
+        <span class="deco star-face">⭐</span><span class="deco s1">✦</span><span class="deco s2">✦</span><span class="deco s3">★</span><span class="deco s4">★</span>
+        <span class="deco book">📖</span><span class="deco pencil">✏️</span>
+        <span class="block block-a">A</span><span class="block block-1">1</span>
+      </div>
+      <p class="hero-brand">🦉 Aprende Conmigo AI</p>
+      <h1 class="hero-title"><span>Aprende</span><span class="yellow">¡Jugando!</span></h1>
+      <div class="hero-art" aria-hidden="true">
+        <span class="hero-kid">🦉</span><span class="hero-friend">🐼</span>
+        <span class="cloud"></span>
+      </div>
+      <button class="btn primary pill" data-action="start">Empezar a aprender</button>
+    </section>
+    <div class="sheet-backdrop ${view.sheet ? 'open' : ''}" data-action="close-sheet"></div>
+    <section class="sheet ${view.sheet ? 'open' : ''}" aria-label="Elegir perfil" ${view.sheet ? '' : 'hidden'}>
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h2 class="sheet-title">¿Quién va a aprender hoy?</h2>
       <div class="profile-grid">
         ${cards}
         <button class="profile-card add" data-go="newProfile"><span class="avatar xl" aria-hidden="true">➕</span><span class="profile-name">Nuevo</span></button>
       </div>
       <button class="link-btn" data-go="parents">👨‍👩‍👧 Zona de padres</button>
     </section>`;
-  autoSay('¡Hola! Soy Profe Búho. ¿Quién va a aprender hoy?');
+  if (view.sheet) autoSay('¿Quién va a aprender hoy?');
 }
 
 function renderNewProfile() {
@@ -118,36 +149,113 @@ function renderNewProfile() {
 
 // ---------- Inicio ----------
 
+const DAILY_BONUS = 20;
+
+const CATEGORIES = [
+  { lesson: 'math', art: '<span class="art-123"><b>1</b><b>2</b><b>3</b></span>', name: 'Números', sub: 'Matemáticas', color: 'blue' },
+  { lesson: 'reading', art: '<span class="art-abc"><b>A</b><b>B</b><b>C</b></span>', name: 'Lectura', sub: 'Cuentos', color: 'yellow' },
+  { lesson: 'english', art: '<span class="art-emoji">🦁</span><span class="art-bubble">Hello!</span>', name: 'Inglés', sub: 'Palabras', color: 'green' },
+  { go: 'homework', art: '<span class="art-emoji">📝</span><span class="art-emoji small">✨</span>', name: 'Mi tarea', sub: 'Ayuda paso a paso', color: 'pink' },
+];
+
+function today() {
+  return new Date().toDateString();
+}
+
+function dailyDone(p) {
+  return p.dailyDoneOn === today();
+}
+
+// La materia que más le cuesta: menos aciertos recientes o nivel más bajo.
+function weakestSubject(p) {
+  const score = (key) => {
+    const items = p.history.filter((h) => h.subject === key).slice(-20);
+    const acc = items.length ? items.filter((h) => h.correct).length / items.length : 0.5;
+    return acc + p.skills[key].level / 10;
+  };
+  return Object.keys(SUBJECTS).reduce((a, b) => (score(b) < score(a) ? b : a));
+}
+
 function renderHome() {
   const p = profile();
   if (!p) return go('profiles');
-  const subjects = Object.entries(SUBJECTS)
-    .map(([key, s]) => {
-      const lvl = p.skills[key].level;
-      return `
-        <button class="subject-card ${key}" data-lesson="${key}">
-          <span class="subject-emoji" aria-hidden="true">${s.emoji}</span>
-          <span class="subject-name">${s.name}</span>
-          <span class="level-pill">Nivel ${lvl} · ${LEVEL_NAMES[lvl]}</span>
-        </button>`;
-    })
-    .join('');
+  const unseen = p.badges.length > (p.seenBadges || 0);
+  const done = dailyDone(p);
+  const cats = CATEGORIES.map((c) => {
+    const level = c.lesson ? p.skills[c.lesson].level : null;
+    return `
+      <button class="cat-card" ${c.lesson ? `data-lesson="${c.lesson}"` : `data-go="${c.go}"`}>
+        <span class="cat-art ${c.color}" aria-hidden="true">${c.art}</span>
+        <span class="cat-name">${c.name}</span>
+        <span class="cat-sub">${level ? `Nivel ${level} · ${LEVEL_NAMES[level]}` : c.sub}</span>
+      </button>`;
+  }).join('');
+
   app.innerHTML = `
-    ${topBar({ back: 'profiles', title: '' })}
-    <section class="screen">
-      <div class="hello">
-        ${avatarHtml(p, 'xl')}
-        <div><p class="hello-small">¡Hola,</p><p class="hello-name">${esc(p.name)}!</p></div>
+    <section class="screen with-nav">
+      <header class="home-head">
+        <button class="home-avatar" data-go="profile" aria-label="Mi perfil">${avatarHtml(p, 'md')}</button>
+        <div class="home-hello">
+          <p class="home-name">Hola, ${esc(p.name)}</p>
+          <p class="home-sub">¡Vamos a aprender algo nuevo!</p>
+        </div>
+        <button class="round-btn bell" data-action="bell" aria-label="${unseen ? 'Tienes medallas nuevas' : 'Avisos'}">${ICONS.bell}${unseen ? '<span class="dot"></span>' : ''}</button>
+      </header>
+
+      <div class="challenge ${done ? 'done' : ''}">
+        <div class="challenge-text">
+          <h2>Reto diario</h2>
+          <p>${done ? '¡Reto completado! Vuelve mañana para otro.' : `Completa una lección y gana ${DAILY_BONUS} monedas extra.`}</p>
+          ${done ? '<span class="challenge-ok">✅ Hecho</span>' : '<button class="btn white" data-action="daily">¡Vamos!</button>'}
+        </div>
+        <span class="trophy" aria-hidden="true">🏆</span>
+        <span class="c-star c1" aria-hidden="true">⭐</span><span class="c-star c2" aria-hidden="true">⭐</span>
       </div>
-      <h2 class="section-title">¿Qué quieres aprender?</h2>
-      <div class="subject-grid">${subjects}</div>
-      <div class="menu-grid">
-        <button class="menu-card homework" data-go="homework"><span aria-hidden="true">📝</span>Ayuda con mi tarea</button>
-        <button class="menu-card games" data-go="games"><span aria-hidden="true">🎮</span>Juegos</button>
-        <button class="menu-card rewards" data-go="rewards"><span aria-hidden="true">🏆</span>Mis premios</button>
-      </div>
-    </section>`;
+
+      <h2 class="section-title">Categorías</h2>
+      <div class="cat-grid">${cats}</div>
+    </section>
+    ${bottomNav('home')}`;
   autoSay(`¡Hola, ${p.name}! ¿Qué quieres aprender hoy?`);
+}
+
+function renderProfile() {
+  const p = profile();
+  if (!p) return go('profiles');
+  const sum = summarize(p.history);
+  const levels = Object.entries(SUBJECTS).map(([key, s]) => {
+    const lvl = p.skills[key].level;
+    return `
+      <li class="level-row">
+        <span class="level-emoji" aria-hidden="true">${s.emoji}</span>
+        <span class="level-info"><b>${s.name}</b><small>Nivel ${lvl} · ${LEVEL_NAMES[lvl]}</small></span>
+        <span class="level-dots" aria-label="Nivel ${lvl} de 5">${[1, 2, 3, 4, 5].map((l) => `<i class="${l <= lvl ? 'on' : ''}"></i>`).join('')}</span>
+      </li>`;
+  }).join('');
+  app.innerHTML = `
+    <section class="screen with-nav">
+      <div class="profile-hero">
+        ${avatarHtml(p, 'xxl')}
+        <h1 class="profile-title">${esc(p.name)}</h1>
+        <p class="profile-age">${p.age} años</p>
+        <div class="result-row">
+          <div class="result"><b>⭐ ${p.stars}</b><span>estrellas</span></div>
+          <div class="result"><b>🪙 ${p.coins}</b><span>monedas</span></div>
+          <div class="result"><b>🏅 ${p.badges.length}</b><span>medallas</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="card-title">Mis niveles</h2>
+        <ul class="level-list">${levels}</ul>
+        <p class="note">Has hecho ${sum.answered} ejercicios. ¡Sigue así!</p>
+      </div>
+      <div class="list-card">
+        <button class="list-item" data-go="homework"><span aria-hidden="true">📝</span>Ayuda con mi tarea<span class="chev" aria-hidden="true">›</span></button>
+        <button class="list-item" data-action="switch-kid"><span aria-hidden="true">👫</span>Cambiar de jugador<span class="chev" aria-hidden="true">›</span></button>
+        <button class="list-item" data-go="parents"><span aria-hidden="true">👨‍👩‍👧</span>Zona de padres<span class="chev" aria-hidden="true">›</span></button>
+      </div>
+    </section>
+    ${bottomNav('profile')}`;
 }
 
 // ---------- Lecciones ----------
@@ -189,46 +297,97 @@ function readQuestion() {
   else say(pr.speech);
 }
 
+// Qué se dibuja en la escena ilustrada de cada pregunta.
+function sceneFor(pr) {
+  if (pr.scene) return pr.scene;
+  if (pr.subject === 'math' && pr.type === 'word') return { emoji: '🧮' };
+  if (pr.subject === 'math') return { text: pr.prompt, sub: pr.visual, math: true };
+  return {};
+}
+
+function questionFor(pr) {
+  if (pr.question) return pr.question;
+  if (pr.subject === 'math' && pr.type !== 'word') return pr.speech;
+  return pr.prompt;
+}
+
+function sceneHtml(pr) {
+  if (pr.passage) {
+    return `
+      <article class="passage card">
+        <div class="passage-head"><span class="passage-emoji" aria-hidden="true">${esc(pr.passage.emoji)}</span><h2>${esc(pr.passage.title)}</h2>
+        <button class="btn small soft-purple" data-action="read-passage">${ICONS.speaker} Leer en voz alta</button></div>
+        <p class="passage-text" id="passage-text">${passageHtml(pr.passage.text)}</p>
+      </article>`;
+  }
+  const sc = sceneFor(pr);
+  let content = '';
+  if (sc.listen) {
+    content = `<button class="play-btn" data-action="speak-question" aria-label="Escuchar la palabra">${ICONS.speaker}<span>Escuchar</span></button>`;
+  } else {
+    content = `
+      ${sc.emoji ? `<span class="scene-emoji" aria-hidden="true">${esc(sc.emoji)}</span>` : ''}
+      ${sc.text ? `<span class="scene-bubble ${sc.math ? 'math' : ''}">${esc(sc.text)}</span>` : ''}
+      ${sc.sub ? `<span class="scene-sub" aria-hidden="true">${esc(sc.sub)}</span>` : ''}`;
+  }
+  return `
+    <div class="scene ${view.subject}">
+      <span class="sky-cloud k1" aria-hidden="true"></span><span class="sky-cloud k2" aria-hidden="true"></span>
+      <span class="hill h1" aria-hidden="true"></span><span class="hill h2" aria-hidden="true"></span>
+      <span class="tree t1" aria-hidden="true">🌳</span><span class="tree t2" aria-hidden="true">🌳</span>
+      <div class="scene-content">${content}</div>
+    </div>`;
+}
+
 function renderLesson() {
   const pr = view.problem;
   const s = SUBJECTS[view.subject];
   const p = profile();
   const level = p.skills[view.subject].level;
-  const progress = Math.round((view.index / SESSION_LENGTH) * 100);
-  const passage = pr.passage
-    ? `<article class="passage card">
-        <div class="passage-head"><span class="passage-emoji" aria-hidden="true">${esc(pr.passage.emoji)}</span><h2>${esc(pr.passage.title)}</h2>
-        <button class="btn small" data-action="read-passage">🔊 Leer en voz alta</button></div>
-        <p class="passage-text" id="passage-text">${passageHtml(pr.passage.text)}</p>
-      </article>`
-    : '';
+  const emojiChoices = pr.bigChoices;
+  const dashes = Array.from({ length: SESSION_LENGTH }, (_, i) => `<i class="${i < view.index ? 'done' : i === view.index ? 'now' : ''}"></i>`).join('');
+  const last = view.index + 1 >= SESSION_LENGTH;
 
   app.innerHTML = `
-    ${topBar({ back: 'home', title: `${s.emoji} ${s.name}` })}
     <section class="screen lesson ${view.subject}">
-      <div class="lesson-meta">
-        <span class="level-pill">Nivel ${level} · ${LEVEL_NAMES[level]}</span>
-        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${SESSION_LENGTH}" aria-valuenow="${view.index}" aria-label="Progreso de la lección"><span style="width:${progress}%"></span></div>
-        <span class="progress-label">${view.index + 1}/${SESSION_LENGTH}</span>
+      <header class="lesson-head">
+        <button class="round-btn" data-go="home" aria-label="Salir de la lección">${ICONS.back}</button>
+        <div class="lesson-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${SESSION_LENGTH}" aria-valuenow="${view.index}" aria-label="Pregunta ${view.index + 1} de ${SESSION_LENGTH}">
+          <b>${view.index + 1}/${SESSION_LENGTH}</b>
+          <span class="dashes">${dashes}</span>
+        </div>
+        <button class="round-btn" data-action="menu" aria-label="Más opciones" aria-expanded="false" aria-controls="lesson-menu">${ICONS.more}</button>
+          <div class="popover" id="lesson-menu" role="menu" hidden>
+            <p class="popover-title">${s.emoji} ${s.name} · Nivel ${level} (${LEVEL_NAMES[level]})</p>
+            <button role="menuitem" data-action="hint">💡 Pista</button>
+            <button role="menuitem" data-action="steps">🪜 Paso a paso</button>
+            <button role="menuitem" data-action="toggle-voice">🔊 Leer en voz alta: <b id="voice-state">${state.settings.autoRead ? 'Sí' : 'No'}</b></button>
+            <button role="menuitem" data-go="home">🏠 Salir</button>
+          </div>
+      </header>
+
+      ${sceneHtml(pr)}
+
+      <div class="question">
+        <p class="question-text">${esc(questionFor(pr))}</p>
+        <button class="speak-chip" data-action="speak-question" aria-label="Escuchar la pregunta">${ICONS.speaker}</button>
       </div>
-      ${passage}
-      <div class="question card">
-        <div class="question-row">
-          <p class="question-text ${pr.type === 'listen' ? 'listen' : ''}">${pr.type === 'listen' ? '👂 ' : ''}${esc(pr.prompt)}</p>
-          <button class="icon-btn speak" data-action="speak-question" aria-label="Escuchar la pregunta">🔊</button>
-        </div>
-        ${pr.visual ? `<p class="visual" aria-hidden="true">${esc(pr.visual)}</p>` : ''}
-        <div class="choices ${pr.bigChoices ? 'big' : ''}" id="choices">
-          ${pr.choices.map((c) => `<button class="choice" data-answer="${esc(c)}">${esc(c)}</button>`).join('')}
-        </div>
-        ${pr.sayChoicesIn ? '<button class="link-btn" data-action="speak-choices">🔊 Escuchar las opciones en inglés</button>' : ''}
-        <div class="feedback" id="feedback" aria-live="polite"></div>
-        <div class="helpers">
-          <button class="btn" data-action="hint">💡 Pista</button>
-          <button class="btn" data-action="steps">🪜 Paso a paso</button>
-        </div>
+
+      <div class="choices ${emojiChoices ? 'big' : ''}" id="choices">
+        ${pr.choices.map((c) => `<button class="choice" data-answer="${esc(c)}"><span>${esc(c)}</span></button>`).join('')}
+      </div>
+      ${pr.sayChoicesIn ? `<button class="link-btn center-link" data-action="speak-choices">${ICONS.speaker} Escuchar las opciones en inglés</button>` : ''}
+
+      <div class="feedback" id="feedback" aria-live="polite"></div>
+      <div class="helpers">
+        <button class="chip" data-action="hint">💡 Pista</button>
+        <button class="chip" data-action="steps">🪜 Paso a paso</button>
       </div>
       <div class="steps card hidden" id="steps"></div>
+
+      <div class="bottom-action">
+        <button class="btn primary pill" id="next-btn" data-action="next" disabled>${last ? 'Terminar lección' : 'Siguiente pregunta'}</button>
+      </div>
     </section>`;
 }
 
@@ -326,8 +485,8 @@ function answer(value, btn) {
     btn.classList.add('right');
     app.querySelectorAll('.choice').forEach((b) => { b.disabled = true; });
     const praise = PRAISE[Math.floor(Math.random() * PRAISE.length)];
-    fb.innerHTML = `<p class="good">${firstTry ? '⭐' : '👍'} ${praise} <span class="earned">+${coins} 🪙</span></p>
-      <button class="btn primary big" data-action="next">${view.index + 1 >= SESSION_LENGTH ? 'Terminar 🏁' : 'Siguiente ➡️'}</button>`;
+    fb.innerHTML = `<p class="good">${firstTry ? '⭐' : '👍'} ${praise} <span class="earned">+${coins} 🪙</span></p>`;
+    enableNext();
     say(praise);
     if (firstTry) confetti(24);
   } else {
@@ -340,8 +499,8 @@ function answer(value, btn) {
         b.disabled = true;
         if (b.dataset.answer === pr.answer) b.classList.add('right');
       });
-      fb.innerHTML = `<p class="soft">La respuesta era <b>${esc(pr.answer)}</b>. ¡La próxima seguro que te sale!</p>
-        <button class="btn primary big" data-action="next">Siguiente ➡️</button>`;
+      fb.innerHTML = `<p class="soft">La respuesta era <b>${esc(pr.answer)}</b>. ¡La próxima seguro que te sale!</p>`;
+      enableNext();
       view.stepIndex = pr.steps.length - 1;
       showSteps();
       const spoken = pr.word ? `${pr.word.es}, que en inglés es ${pr.word.en}` : pr.answer;
@@ -357,6 +516,13 @@ function answer(value, btn) {
   updateProfile(next);
   refreshWallet();
   announceBadges();
+}
+
+function enableNext() {
+  const btn = $('#next-btn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.classList.add('ready');
 }
 
 function refreshWallet() {
@@ -402,9 +568,15 @@ function explanationHtml(reply) {
 }
 
 function finishLesson() {
-  const p = profile();
+  let p = profile();
   const levelNow = p.skills[view.subject].level;
-  const result = { ...view, levelNow };
+  // Terminar cualquier lección completa el reto diario.
+  const daily = !dailyDone(p);
+  if (daily) {
+    p = { ...p, coins: p.coins + DAILY_BONUS, dailyDoneOn: today() };
+    updateProfile(p);
+  }
+  const result = { ...view, coins: view.coins + (daily ? DAILY_BONUS : 0), daily, levelNow };
   go('lessonEnd', { result });
 }
 
@@ -428,6 +600,7 @@ function renderLessonEnd() {
         <div class="result"><b>+${r.coins} 🪙</b><span>monedas</span></div>
       </div>
       <p class="lead">${levelMsg}</p>
+      ${r.daily ? `<p class="daily-won">🏆 ¡Reto diario completado! +${DAILY_BONUS} 🪙</p>` : ''}
       <div class="row">
         <button class="btn primary big" data-lesson="${r.subject}">Otra vez 🔁</button>
         <button class="btn big" data-go="home">Inicio 🏠</button>
@@ -514,16 +687,18 @@ function renderHomeworkSteps() {
 
 function renderGames() {
   app.innerHTML = `
-    ${topBar({ back: 'home', title: '🎮 Juegos' })}
-    <section class="screen">
+    ${topBar({ back: 'home', title: 'Juegos' })}
+    <section class="screen with-nav">
       <div class="game-list">
-        ${GAMES.map((g) => `
+        ${GAMES.map((g, i) => `
           <button class="game-card" data-game="${g.id}">
-            <span class="game-emoji" aria-hidden="true">${g.emoji}</span>
-            <span><b>${esc(g.name)}</b><br><small>${esc(g.desc)}</small></span>
+            <span class="game-art ${['blue', 'green', 'pink'][i % 3]}" aria-hidden="true">${g.emoji}</span>
+            <span class="game-info"><b>${esc(g.name)}</b><small>${esc(g.desc)}</small></span>
+            <span class="play-pill" aria-hidden="true">Jugar</span>
           </button>`).join('')}
       </div>
-    </section>`;
+    </section>
+    ${bottomNav('games')}`;
   autoSay('¿A qué quieres jugar?');
 }
 
@@ -580,11 +755,15 @@ function renderRewards() {
   const stickers = SHOP.filter((i) => i.type === 'sticker' && p.owned.includes(i.id)).map((i) => i.emoji).join(' ');
 
   app.innerHTML = `
-    ${topBar({ back: 'home', title: '🏆 Mis premios' })}
-    <section class="screen">
-      <div class="card hello">
-        ${avatarHtml(p, 'xl')}
-        <div><p class="hello-name">${esc(p.name)}</p><p>⭐ ${p.stars} estrellas · 🪙 ${p.coins} monedas</p>${stickers ? `<p class="stickers" aria-label="Mis pegatinas">${stickers}</p>` : ''}</div>
+    ${topBar({ back: 'home', title: 'Mis premios' })}
+    <section class="screen with-nav">
+      <div class="challenge rewards-banner">
+        <div class="challenge-text">
+          <h2>${esc(p.name)}</h2>
+          <p>⭐ ${p.stars} ${p.stars === 1 ? 'estrella' : 'estrellas'} · 🪙 ${p.coins} ${p.coins === 1 ? 'moneda' : 'monedas'}</p>
+          ${stickers ? `<p class="stickers" aria-label="Mis pegatinas">${stickers}</p>` : ''}
+        </div>
+        <span class="trophy avatar-big" aria-hidden="true">${avatarHtml(p, 'xxl')}</span>
       </div>
       <h2 class="section-title">Medallas (${p.badges.length}/${BADGES.length})</h2>
       <ul class="badge-grid">${badges}</ul>
@@ -592,7 +771,9 @@ function renderRewards() {
       <p class="note">Gana monedas aprendiendo y jugando, y cámbialas por personajes, sombreros y pegatinas.</p>
       <ul class="shop-grid">${shop}</ul>
       ${AVATARS.includes(p.avatar) ? '' : `<p class="row"><button class="btn small" data-equip="default">Volver a mi personaje inicial</button></p>`}
-    </section>`;
+    </section>
+    ${bottomNav('rewards')}`;
+  if ((p.seenBadges || 0) < p.badges.length) updateProfile({ ...p, seenBadges: p.badges.length });
 }
 
 function buyItem(id) {
@@ -748,7 +929,7 @@ function renderPinGate() {
         ${creating ? '<input name="pin2" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off" aria-label="Repita el PIN" class="pin-input" placeholder="Repetir">' : ''}
         <p class="error" id="pin-error" role="alert"></p>
         <button class="btn primary big" type="submit">${creating ? 'Guardar PIN' : 'Entrar'}</button>
-        ${!creating ? `<p class="note">Pista para adultos: ${view.challenge.a} × ${view.challenge.b} = ? <input name="challenge" inputmode="numeric" class="challenge" aria-label="Resultado de la multiplicación"> <button class="link-btn" type="button" data-action="forgot-pin">Olvidé el PIN</button></p>` : ''}
+        ${!creating ? `<p class="note">Pista para adultos: ${view.challenge.a} × ${view.challenge.b} = ? <input name="challenge" inputmode="numeric" class="challenge-answer" aria-label="Resultado de la multiplicación"> <button class="link-btn" type="button" data-action="forgot-pin">Olvidé el PIN</button></p>` : ''}
       </form>
     </section>`;
   $('#pin-form').addEventListener('submit', async (e) => {
@@ -775,11 +956,20 @@ function renderPinGate() {
 
 // ---------- Render y eventos ----------
 
+function closeMenu() {
+  const menu = $('#lesson-menu');
+  if (menu && !menu.hidden) {
+    menu.hidden = true;
+    $('[data-action=menu]')?.setAttribute('aria-expanded', 'false');
+  }
+}
+
 function render() {
   switch (view.name) {
     case 'profiles': return renderProfiles();
     case 'newProfile': return renderNewProfile();
     case 'home': return renderHome();
+    case 'profile': return renderProfile();
     case 'lesson': return renderLesson();
     case 'lessonEnd': return renderLessonEnd();
     case 'homework': return renderHomework();
@@ -792,7 +982,7 @@ function render() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('button, [data-go]');
+  const t = e.target.closest('button, [data-go], [data-action]');
   if (!t) return;
   const d = t.dataset;
 
@@ -829,7 +1019,44 @@ app.addEventListener('click', (e) => {
     return;
   }
 
+  if (d.action !== 'menu') closeMenu();
+
   switch (d.action) {
+    case 'start':
+      if (!state.profiles.length) return go('newProfile');
+      view.sheet = true;
+      return render();
+    case 'close-sheet':
+      view.sheet = false;
+      return render();
+    case 'switch-kid':
+      state.activeId = null;
+      save();
+      return go('profiles', { sheet: true });
+    case 'bell': {
+      const p = profile();
+      const fresh = p.badges.length - (p.seenBadges || 0);
+      updateProfile({ ...p, seenBadges: p.badges.length });
+      if (fresh > 0) return go('rewards');
+      toast(dailyDone(p) ? '¡Ya hiciste el reto de hoy! Puedes seguir practicando.' : `Tienes un reto diario esperando: +${DAILY_BONUS} monedas.`, '🔔');
+      return render();
+    }
+    case 'daily':
+      stopSpeaking();
+      return startLesson(weakestSubject(profile()));
+    case 'menu': {
+      const menu = $('#lesson-menu');
+      menu.hidden = !menu.hidden;
+      t.setAttribute('aria-expanded', String(!menu.hidden));
+      return;
+    }
+    case 'toggle-voice': {
+      state.settings.autoRead = !state.settings.autoRead;
+      save();
+      if (!state.settings.autoRead) stopSpeaking();
+      toast(`Leer en voz alta: ${state.settings.autoRead ? 'activado' : 'desactivado'}`, '🔊');
+      return;
+    }
     case 'speak-question': {
       const pr = view.problem;
       return say(pr.speech, { lang: pr.speechLang || 'es-ES', slow: true });
@@ -869,7 +1096,7 @@ app.addEventListener('click', (e) => {
     case 'lock': return go(state.activeId ? 'home' : 'profiles');
     case 'forgot-pin': {
       const form = $('#pin-form');
-      const val = Number(form.querySelector('.challenge').value);
+      const val = Number(form.querySelector('.challenge-answer').value);
       if (val === view.challenge.a * view.challenge.b) {
         state.parentPinHash = null;
         save();

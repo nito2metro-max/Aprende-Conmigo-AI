@@ -4,8 +4,8 @@
   "description": "Tu profesor personal con inteligencia artificial: matemáticas, lectura e inglés.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#fff8ec",
-  "theme_color": "#ff9f43",
+  "background_color": "#f4f2fc",
+  "theme_color": "#7b5cf6",
   "lang": "es",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }
