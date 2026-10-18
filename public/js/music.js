@@ -115,6 +115,7 @@ let settings = { music: true, sfx: true, volume: 0.6 };
 let wanted = null; // pista que debería sonar
 let current = null; // { name, gain, events, index, loopStart, timer }
 let ducked = false;
+let unduckTimer = null;
 
 function ensureContext() {
   if (!AudioCtx) return null;
@@ -142,7 +143,7 @@ function ensureContext() {
 
 function applyMusicVolume(ramp = 0.4) {
   if (!ctx) return;
-  const target = settings.music ? settings.volume * (ducked ? 0.25 : 1) : 0;
+  const target = settings.music && !ducked ? settings.volume : 0;
   musicBus.gain.cancelScheduledValues(ctx.currentTime);
   musicBus.gain.setTargetAtTime(target, ctx.currentTime, ramp / 3 || 0.001);
 }
@@ -162,10 +163,25 @@ export function configureAudio(next) {
   if (ctx && settings.music && wanted && !current) startTrack(wanted);
 }
 
-// La música baja mientras la voz lee.
+// La música se pausa del todo mientras la voz lee y vuelve poco a poco
+// medio segundo después, para que nunca se mezclen.
+export const RESUME_DELAY_MS = 600;
+
 export function duckMusic(on) {
-  ducked = on;
-  applyMusicVolume(on ? 0.25 : 0.8);
+  clearTimeout(unduckTimer);
+  if (on) {
+    ducked = true;
+    applyMusicVolume(0.15);
+  } else {
+    unduckTimer = setTimeout(() => {
+      ducked = false;
+      applyMusicVolume(1.2);
+    }, RESUME_DELAY_MS);
+  }
+}
+
+export function musicState() {
+  return { track: current?.name ?? null, wanted, ducked, running: ctx?.state === 'running' };
 }
 
 function envelope(gain, start, attack, peak, decayTo, end) {

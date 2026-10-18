@@ -7,7 +7,7 @@ import { generateEnglishProblem } from './english.js';
 import { coinsForAnswer, newBadges, BADGES, SHOP, buy } from './rewards.js';
 import { summarize, recommendations, recentAccuracy, SUBJECTS } from './stats.js';
 import { speak, stopSpeaking, configureSpeech, speechSupported, dictate, dictationSupported, onSpeaking, spanishVoices } from './speech.js';
-import { playMusic, playSfx, unlockAudio, configureAudio, duckMusic, audioSupported } from './music.js';
+import { playMusic, playSfx, unlockAudio, configureAudio, duckMusic, audioSupported, musicState } from './music.js';
 import { askBuddy, buddyMode, SUGGESTIONS } from './buddy.js';
 import { askTutor, aiReachable } from './tutor.js';
 import { GAMES, STARTERS } from './games.js';
@@ -30,8 +30,13 @@ onSpeaking(duckMusic);
 // Música de fondo de cada pantalla.
 const MUSIC_FOR = {
   profiles: 'menu', newProfile: 'menu', home: 'menu', profile: 'menu', games: 'menu', rewards: 'menu',
-  lesson: 'lesson', lessonEnd: 'menu', homework: 'lesson', buddy: 'lesson', game: 'game', parents: null,
+  // En la pantalla de reglas del juego no suena música: la voz explica cómo jugar.
+  lesson: 'lesson', lessonEnd: 'menu', homework: 'lesson', buddy: 'lesson', game: null, parents: null,
 };
+
+// Música al empezar cada juego. En memoria y globos la voz dice las palabras
+// (son juegos de escuchar), así que no llevan música.
+const GAME_MUSIC = { race: 'game', memory: null, balloons: null };
 
 function profile() {
   return state.profiles.find((p) => p.id === state.activeId) || null;
@@ -296,6 +301,7 @@ function makeProblem(subject, level, seen) {
 }
 
 function startLesson(subject) {
+  playMusic(MUSIC_FOR.lesson);
   view = {
     name: 'lesson',
     subject,
@@ -886,6 +892,7 @@ function startGame() {
   const g = GAMES.find((x) => x.id === view.game);
   const p = profile();
   stopSpeaking();
+  playMusic(GAME_MUSIC[g.id] ?? null);
   cleanup = STARTERS[g.id]($('#game'), {
     level: p.skills[g.subject].level,
     speak: (text, opts) => say(text, opts),
@@ -1410,6 +1417,9 @@ function runIntro() {
   setTimeout(close, reduce ? 1200 : 3600);
 }
 runIntro();
+
+// Para pruebas automáticas: estado de la música.
+window.__aprendeMusic = musicState;
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

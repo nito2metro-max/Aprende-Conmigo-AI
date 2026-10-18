@@ -12,7 +12,7 @@ Un profesor personal con inteligencia artificial para niños y niñas de 6 a 12 
 | **Juegos y recompensas** | 3 juegos (Carrera de cohetes, Memoria en inglés, Globos de palabras), estrellas, monedas, 12 medallas y una tienda de personajes, sombreros y pegatinas. |
 | **Ayuda con la tarea** | El niño escribe (o dicta) su tarea y el tutor con IA (Claude) se la explica paso a paso y le propone un ejercicio parecido. |
 | **Profe Búho IA** | Un compañero de estudio con el que el niño conversa (escribiendo o hablando): explica temas, hace preguntas de repaso de una en una y las corrige, y cuenta cuentos. Lee sus respuestas en voz alta. Sin IA, sigue haciendo preguntas, explicando operaciones y contando cuentos. |
-| **Música y sonidos** | Melodías infantiles originales para los menús, las lecciones (más tranquila) y los juegos (más rápida), generadas en el dispositivo sin archivos de audio. Efectos al acertar, fallar, ganar monedas o medallas, subir de nivel y en los juegos. La música baja sola cuando habla la voz. |
+| **Música y sonidos** | Melodías infantiles originales para los menús, las lecciones (más tranquila) y los juegos (más rápida), generadas en el dispositivo sin archivos de audio. Efectos al acertar, fallar, ganar monedas o medallas, subir de nivel y en los juegos. La música se pausa del todo cuando habla la voz y vuelve después; las reglas de los juegos y los juegos de escuchar (memoria y globos) no llevan música. |
 | **Zona de padres** | Protegida con PIN: aciertos por materia, nivel, actividad de los últimos 7 días, recomendaciones, ajuste manual del nivel y de la voz. |
 
 Funciona en móvil, tableta y ordenador, y se puede instalar como app (PWA). Sin la IA, la app sigue funcionando con las explicaciones integradas.

@@ -5,17 +5,30 @@ let rate = 0.9;
 let enabled = true;
 let preferredVoice = '';
 const listeners = new Set();
-let speakingCount = 0;
+let speaking = false;
+let currentToken = null;
+let safetyTimer = null;
 
-// Avisa cuando la voz empieza o termina (la música baja mientras habla).
+// Avisa cuando la voz empieza o termina (la música se pausa mientras habla).
 export function onSpeaking(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-function setSpeaking(delta) {
-  speakingCount = Math.max(0, speakingCount + delta);
-  for (const fn of listeners) fn(speakingCount > 0);
+function setSpeaking(on) {
+  if (speaking === on) return;
+  speaking = on;
+  for (const fn of listeners) fn(on);
+}
+
+export function isSpeaking() {
+  return speaking;
+}
+
+// Tiempo máximo que puede durar una frase. Safari en iPhone a veces no avisa
+// de que la voz terminó: pasado este tiempo damos la frase por acabada.
+export function maxSpeechMs(text, rateValue = rate) {
+  return 1500 + (String(text).length * 95) / Math.max(0.5, rateValue);
 }
 
 export const speechSupported = Boolean(synth && globalThis.SpeechSynthesisUtterance);
@@ -60,8 +73,10 @@ export function cleanForSpeech(text) {
 }
 
 export function stopSpeaking() {
+  currentToken = null;
+  clearTimeout(safetyTimer);
   if (speechSupported) synth.cancel();
-  if (speakingCount) setSpeaking(-speakingCount);
+  setSpeaking(false);
 }
 
 // Lee un texto. `onWord(charIndex)` se llama en cada palabra si el navegador
@@ -72,23 +87,37 @@ export function speak(text, { lang = 'es-ES', onWord, onEnd, slow = false } = {}
     return Promise.resolve();
   }
   synth.cancel();
+  // La música se pausa en cuanto pedimos hablar, sin esperar a que el
+  // navegador avise de que empezó (en iPhone ese aviso llega tarde o nunca).
+  const token = {};
+  currentToken = token;
+  setSpeaking(true);
   return new Promise((resolve) => {
-    const u = new SpeechSynthesisUtterance(lang.startsWith('es') ? cleanForSpeech(text) : String(text));
+    const spoken = lang.startsWith('es') ? cleanForSpeech(text) : String(text);
+    const u = new SpeechSynthesisUtterance(spoken);
     u.lang = lang;
     u.rate = slow ? Math.max(0.5, rate - 0.25) : rate;
     u.pitch = 1.05;
     const voice = findVoice(lang);
     if (voice) u.voice = voice;
     if (onWord) u.onboundary = (e) => { if (e.name === 'word' || e.name === undefined) onWord(e.charIndex); };
-    let started = false;
-    u.onstart = () => { started = true; setSpeaking(1); };
+    let finished = false;
     const done = () => {
-      if (started) { started = false; setSpeaking(-1); }
+      if (finished) return;
+      finished = true;
+      // Sólo la frase más reciente decide cuándo vuelve la música.
+      if (currentToken === token) {
+        currentToken = null;
+        clearTimeout(safetyTimer);
+        setSpeaking(false);
+      }
       onEnd?.();
       resolve();
     };
     u.onend = done;
     u.onerror = done;
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(done, maxSpeechMs(spoken, u.rate));
     synth.speak(u);
   });
 }
