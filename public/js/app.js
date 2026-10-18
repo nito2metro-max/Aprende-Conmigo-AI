@@ -6,7 +6,9 @@ import { generateReadingProblem, splitWords } from './reading.js';
 import { generateEnglishProblem } from './english.js';
 import { coinsForAnswer, newBadges, BADGES, SHOP, buy } from './rewards.js';
 import { summarize, recommendations, recentAccuracy, SUBJECTS } from './stats.js';
-import { speak, stopSpeaking, configureSpeech, speechSupported, dictate, dictationSupported } from './speech.js';
+import { speak, stopSpeaking, configureSpeech, speechSupported, dictate, dictationSupported, onSpeaking, spanishVoices } from './speech.js';
+import { playMusic, playSfx, unlockAudio, configureAudio, duckMusic, audioSupported } from './music.js';
+import { askBuddy, buddyMode, SUGGESTIONS } from './buddy.js';
 import { askTutor, aiReachable } from './tutor.js';
 import { GAMES, STARTERS } from './games.js';
 import { esc, $, toast, confetti, avatarHtml, ICONS } from './ui.js';
@@ -21,7 +23,15 @@ let state = loadState();
 let view = { name: 'profiles' };
 let cleanup = null;
 
-configureSpeech({ rate: state.settings.voiceRate });
+configureSpeech({ rate: state.settings.voiceRate, voice: state.settings.voice || '' });
+configureAudio({ music: state.settings.music !== false, sfx: state.settings.sfx !== false, volume: state.settings.musicVolume ?? 0.6 });
+onSpeaking(duckMusic);
+
+// Música de fondo de cada pantalla.
+const MUSIC_FOR = {
+  profiles: 'menu', newProfile: 'menu', home: 'menu', profile: 'menu', games: 'menu', rewards: 'menu',
+  lesson: 'lesson', lessonEnd: 'menu', homework: 'lesson', buddy: 'lesson', game: 'game', parents: null,
+};
 
 function profile() {
   return state.profiles.find((p) => p.id === state.activeId) || null;
@@ -51,6 +61,7 @@ function go(name, params = {}) {
   cleanup?.();
   cleanup = null;
   view = { name, ...params };
+  playMusic(MUSIC_FOR[name] ?? null);
   render();
   window.scrollTo({ top: 0 });
   app.focus({ preventScroll: true });
@@ -73,6 +84,7 @@ function topBar({ back = 'home', title = '' } = {}) {
 const NAV = [
   { go: 'home', label: 'Inicio', icon: 'home' },
   { go: 'games', label: 'Juegos', icon: 'game' },
+  { go: 'buddy', label: 'Profe IA', owl: true },
   { go: 'rewards', label: 'Premios', icon: 'gift' },
   { go: 'profile', label: 'Perfil', icon: 'user' },
 ];
@@ -80,8 +92,16 @@ const NAV = [
 function bottomNav(active) {
   return `
     <nav class="bottom-nav" aria-label="Menú principal">
-      ${NAV.map((n) => `<button class="nav-item ${n.go === active ? 'on' : ''}" data-go="${n.go}" ${n.go === active ? 'aria-current="page"' : ''}>${ICONS[n.icon]}<span>${n.label}</span></button>`).join('')}
+      ${NAV.map((n) => n.owl
+        ? `<button class="nav-item nav-owl ${n.go === active ? 'on' : ''}" data-go="${n.go}" ${n.go === active ? 'aria-current="page"' : ''}><span class="owl-btn" aria-hidden="true">🦉</span><span>${n.label}</span></button>`
+        : `<button class="nav-item ${n.go === active ? 'on' : ''}" data-go="${n.go}" ${n.go === active ? 'aria-current="page"' : ''}>${ICONS[n.icon]}<span>${n.label}</span></button>`).join('')}
     </nav>`;
+}
+
+function musicButton() {
+  if (!audioSupported) return '';
+  const on = state.settings.music !== false;
+  return `<button class="round-btn music-btn ${on ? 'on' : ''}" data-action="toggle-music" aria-pressed="${on}" aria-label="${on ? 'Apagar la música' : 'Encender la música'}">${ICONS.music}${on ? '' : '<span class="slash" aria-hidden="true"></span>'}</button>`;
 }
 
 // ---------- Bienvenida y perfiles ----------
@@ -201,6 +221,7 @@ function renderHome() {
           <p class="home-name">Hola, ${esc(p.name)}</p>
           <p class="home-sub">¡Vamos a aprender algo nuevo!</p>
         </div>
+        ${musicButton()}
         <button class="round-btn bell" data-action="bell" aria-label="${unseen ? 'Tienes medallas nuevas' : 'Avisos'}">${ICONS.bell}${unseen ? '<span class="dot"></span>' : ''}</button>
       </header>
 
@@ -213,6 +234,12 @@ function renderHome() {
         <span class="trophy" aria-hidden="true">🏆</span>
         <span class="c-star c1" aria-hidden="true">⭐</span><span class="c-star c2" aria-hidden="true">⭐</span>
       </div>
+
+      <button class="buddy-card" data-go="buddy">
+        <span class="buddy-owl" aria-hidden="true">🦉</span>
+        <span class="buddy-text"><b>Estudia con Profe Búho IA</b><small>Pregúntale lo que quieras, te hace preguntas para repasar y te cuenta cuentos.</small></span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>
 
       <h2 class="section-title">Categorías</h2>
       <div class="cat-grid">${cats}</div>
@@ -258,6 +285,8 @@ function renderProfile() {
       </div>
     </section>
     ${bottomNav('profile')}`;
+  const lv = Object.entries(SUBJECTS).map(([key, s]) => `${s.name}, nivel ${p.skills[key].level}`).join('; ');
+  autoSay(`Este es tu perfil, ${p.name}. Tienes ${p.stars} estrellas y ${p.coins} monedas. Tus niveles: ${lv}.`);
 }
 
 // ---------- Lecciones ----------
@@ -363,6 +392,7 @@ function renderLesson() {
             <p class="popover-title">${s.emoji} ${s.name} · Nivel ${level} (${LEVEL_NAMES[level]})</p>
             <button role="menuitem" data-action="hint">💡 Pista</button>
             <button role="menuitem" data-action="steps">🪜 Paso a paso</button>
+            <button role="menuitem" data-action="toggle-music">🎵 Música: ${state.settings.music !== false ? 'Sí' : 'No'}</button>
             <button role="menuitem" data-action="toggle-voice">🔊 Leer en voz alta: <b id="voice-state">${state.settings.autoRead ? 'Sí' : 'No'}</b></button>
             <button role="menuitem" data-go="home">🏠 Salir</button>
           </div>
@@ -472,7 +502,13 @@ function answer(value, btn) {
       bestStreak: Math.max(p.bestStreak, streak),
       history: [...p.history, { t: Date.now(), subject: view.subject, level: p.skills[view.subject].level, correct, ms: Date.now() - view.startedAt }],
     };
-    if (changed === 'up') setTimeout(() => toast(`¡Subes al nivel ${skill.level}: ${LEVEL_NAMES[skill.level]}!`, '🌟'), 600);
+    if (changed === 'up') {
+      setTimeout(() => {
+        toast(`¡Subes al nivel ${skill.level}: ${LEVEL_NAMES[skill.level]}!`, '🌟');
+        playSfx('levelUp');
+        say(`¡Felicidades! Subes al nivel ${skill.level}, ${LEVEL_NAMES[skill.level]}.`);
+      }, 900);
+    }
     if (changed === 'down') setTimeout(() => toast('Vamos a practicar con ejercicios un poco más fáciles. ¡Tú puedes!', '💪'), 600);
   }
 
@@ -487,6 +523,8 @@ function answer(value, btn) {
     btn.classList.add('right');
     app.querySelectorAll('.choice').forEach((b) => { b.disabled = true; });
     const praise = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+    playSfx('correct');
+    setTimeout(() => playSfx('coin'), 250);
     fb.innerHTML = `<p class="good">${firstTry ? '⭐' : '👍'} ${praise} <span class="earned">+${coins} 🪙</span></p>`;
     enableNext();
     say(praise);
@@ -494,6 +532,7 @@ function answer(value, btn) {
   } else {
     btn.classList.add('wrong');
     btn.disabled = true;
+    playSfx('wrong');
     if (view.attempts >= 2) {
       view.solved = true;
       next = { ...next, coins: next.coins + coinsForAnswer(false, 0) };
@@ -540,8 +579,10 @@ function announceBadges() {
   updateProfile({ ...p, badges: [...p.badges, ...won.map((b) => b.id)] });
   won.forEach((b, i) => setTimeout(() => {
     toast(`¡Nueva medalla: ${b.name}!`, b.emoji);
+    playSfx('badge');
     confetti();
-  }, 900 + i * 1200));
+    say(`¡Ganaste una medalla nueva: ${b.name}!`);
+  }, 1600 + i * 2200));
 }
 
 async function aiExplain() {
@@ -608,6 +649,7 @@ function renderLessonEnd() {
         <button class="btn big" data-go="home">Inicio 🏠</button>
       </div>
     </section>`;
+  playSfx(great ? 'fanfare' : 'levelUp');
   if (great) confetti(60);
   autoSay(`${great ? '¡Lección superada!' : '¡Buen trabajo!'} Acertaste ${r.correct} de ${SESSION_LENGTH}. ${levelMsg}`);
 }
@@ -637,6 +679,7 @@ function renderHomework() {
       <p class="note" id="ai-note"></p>
     </section>`;
 
+  autoSay('Escribe tu tarea y te la explico paso a paso.');
   aiReachable().then((ok) => {
     const note = $('#ai-note');
     if (note) note.textContent = ok ? '🤖 El tutor con IA está activado.' : '📚 Modo sin conexión: explico operaciones y palabras; las preguntas abiertas necesitan el tutor con IA.';
@@ -685,6 +728,134 @@ function renderHomeworkSteps() {
   autoSay(done && r.tryIt ? `${text} ${r.tryIt}` : text);
 }
 
+// ---------- Profe Búho IA ----------
+
+const chats = {};
+
+function chatFor(p) {
+  if (!chats[p.id]) {
+    chats[p.id] = [{
+      role: 'assistant',
+      content: `¡Hola, ${p.name}! Soy Profe Búho 🦉, tu compañero de estudio. Puedo explicarte cosas, hacerte preguntas para repasar o contarte un cuento. ¿Qué quieres estudiar hoy?`,
+    }];
+  }
+  return chats[p.id];
+}
+
+function bubbleHtml(m, i) {
+  if (m.role === 'user') return `<div class="msg kid"><p>${esc(m.content)}</p></div>`;
+  const body = m.pending && !m.content
+    ? '<p class="typing" aria-label="Profe Búho está escribiendo"><i></i><i></i><i></i></p>'
+    : `<p>${esc(m.content)}</p>`;
+  return `
+    <div class="msg owl" data-i="${i}">
+      <span class="msg-avatar" aria-hidden="true">🦉</span>
+      <div class="msg-bubble">${body}
+        ${m.pending ? '' : `<button class="msg-say" data-say="${esc(m.content)}" aria-label="Escuchar">${ICONS.speaker}</button>`}
+      </div>
+    </div>`;
+}
+
+function renderChat() {
+  const box = $('#chat');
+  const p = profile();
+  if (!box || !p) return;
+  const chat = chatFor(p);
+  box.innerHTML = chat.map(bubbleHtml).join('');
+  const sugg = $('#buddy-suggestions');
+  if (sugg) sugg.hidden = chat.length > 1;
+  const send = $('#buddy-send');
+  if (send) {
+    send.dataset.action = view.buddyBusy ? 'buddy-stop' : 'buddy-send';
+    send.setAttribute('aria-label', view.buddyBusy ? 'Detener' : 'Enviar');
+    send.innerHTML = view.buddyBusy ? ICONS.stop : ICONS.send;
+  }
+  box.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+function renderBuddy() {
+  const p = profile();
+  if (!p) return go('profiles');
+  const chat = chatFor(p);
+  app.innerHTML = `
+    <section class="screen buddy">
+      <header class="buddy-head">
+        <button class="round-btn" data-go="home" aria-label="Volver">${ICONS.back}</button>
+        <div class="buddy-id">
+          <span class="buddy-avatar" aria-hidden="true">🦉</span>
+          <div><b>Profe Búho IA</b><small id="buddy-status">Tu compañero de estudio</small></div>
+        </div>
+        <button class="round-btn" data-action="buddy-new" aria-label="Empezar otra conversación">${ICONS.refresh}</button>
+      </header>
+      <div class="chat" id="chat" aria-live="polite"></div>
+      <div class="suggestions" id="buddy-suggestions" ${chat.length > 1 ? 'hidden' : ''}>
+        ${SUGGESTIONS.map((sg) => `<button class="chip" data-action="buddy-suggest" data-text="${esc(sg.text)}">${sg.emoji} ${esc(sg.text)}</button>`).join('')}
+      </div>
+      <form class="composer" id="buddy-form">
+        ${dictationSupported ? `<button type="button" class="round-btn mic" data-action="buddy-dictate" aria-label="Hablar">${ICONS.mic}</button>` : ''}
+        <label class="sr-only" for="buddy-input">Escribe a Profe Búho</label>
+        <input id="buddy-input" maxlength="600" autocomplete="off" placeholder="Escribe tu pregunta…">
+        <button type="submit" class="send-btn" id="buddy-send" data-action="buddy-send" aria-label="Enviar">${ICONS.send}</button>
+      </form>
+    </section>
+    ${bottomNav('buddy')}`;
+  renderChat();
+  $('#buddy-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!view.buddyBusy) sendBuddy();
+  });
+  buddyMode().then((mode) => {
+    const st = $('#buddy-status');
+    if (st) st.textContent = mode === 'offline' ? '📚 Modo sin conexión' : '🟢 IA conectada';
+  });
+  if (chat.length === 1) autoSay(chat[0].content);
+}
+
+async function sendBuddy(preset) {
+  if (view.buddyBusy) return;
+  const input = $('#buddy-input');
+  const text = String(preset ?? input?.value ?? '').trim().slice(0, 600);
+  if (!text) return;
+  const p = profile();
+  const chat = chatFor(p);
+  chat.push({ role: 'user', content: text });
+  if (input) input.value = '';
+  const msg = { role: 'assistant', content: '', pending: true };
+  chat.push(msg);
+  view.buddyBusy = true;
+  stopSpeaking();
+  playSfx('tap');
+  renderChat();
+
+  const ctl = new AbortController();
+  view.buddyCtl = ctl;
+  const levels = Object.fromEntries(Object.keys(SUBJECTS).map((k) => [k, p.skills[k].level]));
+  try {
+    const reply = await askBuddy(chat.slice(0, -1), { age: p.age, levels }, {
+      signal: ctl.signal,
+      onText: (t) => {
+        msg.content = t;
+        const el = document.querySelector(`#chat .msg[data-i="${chat.indexOf(msg)}"] .msg-bubble p`);
+        if (el) { el.className = ''; el.textContent = t; }
+      },
+    });
+    msg.content = reply.text;
+    msg.source = reply.source;
+    playSfx('flip');
+    autoSay(reply.text);
+  } catch (e) {
+    msg.content = msg.content || (e?.code === 'cancelled' || e?.name === 'AbortError' ? 'Vale, paro aquí. ¿Qué más quieres saber?' : 'Uy, se me enredaron las plumas 🦉. ¿Me lo preguntas otra vez?');
+  } finally {
+    msg.pending = false;
+    view.buddyBusy = false;
+    view.buddyCtl = null;
+    const cur = profile();
+    if (cur) updateProfile({ ...cur, buddyAsked: (cur.buddyAsked || 0) + 1 });
+    renderChat();
+    announceBadges();
+  }
+}
+
 // ---------- Juegos ----------
 
 function renderGames() {
@@ -706,13 +877,32 @@ function renderGames() {
 
 function renderGame() {
   const g = GAMES.find((x) => x.id === view.game);
-  const p = profile();
   app.innerHTML = `
     ${topBar({ back: 'games', title: `${g.emoji} ${g.name}` })}
-    <section class="screen"><div class="card game-area" id="game"></div></section>`;
+    <section class="screen">
+      <div class="card game-area" id="game">
+        <div class="game-rules center">
+          <span class="game-art big ${g.subject === 'math' ? 'blue' : g.subject === 'english' ? 'green' : 'pink'}" aria-hidden="true">${g.emoji}</span>
+          <h2 class="big-title">${esc(g.name)}</h2>
+          <p class="lead">${esc(g.rules.replace(/^[^.]+\.\s*/, '').replace(/\s*¡Toca A jugar!$/, ''))}</p>
+          <div class="row">
+            <button class="btn primary big" data-action="start-game">¡A jugar! ▶️</button>
+            <button class="btn big" data-say="${esc(g.rules)}">🔊 Escuchar</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  autoSay(g.rules);
+}
+
+function startGame() {
+  const g = GAMES.find((x) => x.id === view.game);
+  const p = profile();
+  stopSpeaking();
   cleanup = STARTERS[g.id]($('#game'), {
     level: p.skills[g.subject].level,
     speak: (text, opts) => say(text, opts),
+    sfx: playSfx,
     onFinish: (result) => {
       cleanup?.();
       cleanup = null;
@@ -742,7 +932,7 @@ function renderRewards() {
   const p = profile();
   const badges = BADGES.map((b) => {
     const has = p.badges.includes(b.id);
-    return `<li class="badge ${has ? 'got' : ''}" title="${esc(b.desc)}"><span class="badge-emoji" aria-hidden="true">${has ? b.emoji : '🔒'}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></li>`;
+    return `<li class="badge ${has ? 'got' : ''}" title="${esc(b.desc)}" data-say="${esc(`${b.name}. ${has ? '¡Ya la tienes!' : 'Para ganarla:'} ${b.desc}`)}"><span class="badge-emoji" aria-hidden="true">${has ? b.emoji : '🔒'}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></li>`;
   }).join('');
   const shop = SHOP.map((item) => {
     const owned = p.owned.includes(item.id);
@@ -776,6 +966,7 @@ function renderRewards() {
     </section>
     ${bottomNav('rewards')}`;
   if ((p.seenBadges || 0) < p.badges.length) updateProfile({ ...p, seenBadges: p.badges.length });
+  autoSay(`Tienes ${p.stars} estrellas, ${p.coins} monedas y ${p.badges.length} medallas. Toca una medalla para escuchar cómo se gana.`);
 }
 
 function buyItem(id) {
@@ -794,7 +985,9 @@ function buyItem(id) {
   if (item.type === 'hat') next = { ...next, hat: item.emoji };
   updateProfile(next);
   toast(`¡Conseguiste: ${item.name}!`, item.emoji);
+  playSfx('coin');
   confetti();
+  say(`¡Conseguiste ${item.type === 'sticker' ? 'la pegatina' : 'el'} ${item.name}!`);
   render();
 }
 
@@ -910,6 +1103,19 @@ function settingsPanel() {
       <label>Velocidad de la voz
         <input type="range" id="set-rate" min="0.6" max="1.2" step="0.1" value="${state.settings.voiceRate}">
       </label>
+      ${speechSupported ? `<label>Voz
+        <select id="set-voice">
+          <option value="">Automática</option>
+          ${spanishVoices().map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === state.settings.voice ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}
+        </select>
+      </label>` : ''}
+      ${audioSupported ? `
+        <label class="switch"><input type="checkbox" id="set-music" ${state.settings.music !== false ? 'checked' : ''}> Música infantil de fondo</label>
+        <label>Volumen de la música
+          <input type="range" id="set-music-volume" min="0.1" max="1" step="0.1" value="${state.settings.musicVolume ?? 0.6}">
+        </label>
+        <label class="switch"><input type="checkbox" id="set-sfx" ${state.settings.sfx !== false ? 'checked' : ''}> Efectos de sonido (aciertos, monedas, juegos)</label>
+        <p class="note">En el iPhone, si el interruptor de silencio está activado no se oye la música ni los efectos.</p>` : ''}
       <div class="row">
         <button class="btn small" data-action="test-voice">🔊 Probar voz</button>
         <button class="btn small" data-action="change-pin">Cambiar PIN</button>
@@ -979,12 +1185,13 @@ function render() {
     case 'game': return renderGame();
     case 'rewards': return renderRewards();
     case 'parents': return renderParents();
+    case 'buddy': return renderBuddy();
     default: return renderProfiles();
   }
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('button, [data-go], [data-action]');
+  const t = e.target.closest('button, [data-go], [data-action], [data-say]');
   if (!t) return;
   const d = t.dataset;
 
@@ -1058,6 +1265,30 @@ app.addEventListener('click', (e) => {
       t.setAttribute('aria-expanded', String(!menu.hidden));
       return;
     }
+    case 'toggle-music': {
+      state.settings.music = state.settings.music === false;
+      save();
+      configureAudio({ music: state.settings.music });
+      unlockAudio();
+      toast(`Música: ${state.settings.music ? 'encendida' : 'apagada'}`, '🎵');
+      if (t.classList.contains('music-btn')) t.outerHTML = musicButton();
+      return;
+    }
+    case 'start-game': return startGame();
+    case 'buddy-send': return sendBuddy();
+    case 'buddy-suggest': return sendBuddy(t.dataset.text);
+    case 'buddy-stop': return view.buddyCtl?.abort();
+    case 'buddy-dictate': {
+      t.classList.add('listening');
+      dictate({
+        onText: (text) => { const q = $('#buddy-input'); if (q) q.value = text; sendBuddy(); },
+        onEnd: () => t.classList.remove('listening'),
+      });
+      return;
+    }
+    case 'buddy-new':
+      view.chat = [];
+      return render();
     case 'toggle-voice': {
       state.settings.autoRead = !state.settings.autoRead;
       save();
@@ -1118,11 +1349,32 @@ app.addEventListener('click', (e) => {
   }
 });
 
+// El primer toque desbloquea el audio (obligatorio en iPhone) y los botones principales hacen "clic".
+document.addEventListener('pointerdown', (e) => {
+  unlockAudio();
+  if (e.target.closest?.('.nav-item, .cat-card, .round-btn, .btn.primary, .game-card, .buddy-card, .chip')) playSfx('tap');
+}, { capture: true });
+
 app.addEventListener('change', (e) => {
   const t = e.target;
   if (t.id === 'set-autoread') {
     state.settings.autoRead = t.checked;
     save();
+  } else if (t.id === 'set-voice') {
+    state.settings.voice = t.value;
+    configureSpeech({ voice: t.value });
+    save();
+    speak('¡Hola! Esta es mi nueva voz.');
+  } else if (t.id === 'set-music' || t.id === 'set-sfx' || t.id === 'set-music-volume') {
+    if (t.id === 'set-music') state.settings.music = t.checked;
+    if (t.id === 'set-sfx') state.settings.sfx = t.checked;
+    if (t.id === 'set-music-volume') state.settings.musicVolume = Number(t.value);
+    save();
+    configureAudio({ music: state.settings.music !== false, sfx: state.settings.sfx !== false, volume: state.settings.musicVolume ?? 0.6 });
+    unlockAudio();
+    // Para oír el cambio desde la zona de padres, que normalmente está en silencio.
+    if (t.id !== 'set-sfx') { playMusic('menu'); clearTimeout(view.previewTimer); view.previewTimer = setTimeout(() => playMusic(MUSIC_FOR[view.name] ?? null), 4000); }
+    else playSfx('correct');
   } else if (t.id === 'set-rate') {
     state.settings.voiceRate = Number(t.value);
     configureSpeech({ rate: state.settings.voiceRate });
@@ -1165,7 +1417,11 @@ function runIntro() {
     const p = profile();
     autoSay(p ? `¡Hola, ${p.name}! ¿Qué quieres aprender hoy?` : '¡Hola! Soy Profe Búho. ¡Vamos a aprender jugando!');
   };
-  intro.addEventListener('click', close);
+  intro.addEventListener('click', () => {
+    unlockAudio();
+    playSfx('jingle');
+    close();
+  });
   intro.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') close(); });
   intro.querySelector('.intro-skip')?.focus({ preventScroll: true });
   setTimeout(close, reduce ? 1200 : 3600);

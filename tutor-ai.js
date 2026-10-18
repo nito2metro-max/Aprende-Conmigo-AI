@@ -1,5 +1,6 @@
 // Tutor con inteligencia artificial (Claude) para "Ayuda con mi tarea".
 import Anthropic from '@anthropic-ai/sdk';
+import { buddyRules } from './public/js/buddy.js';
 
 export const DEFAULT_MODEL = 'claude-opus-5-5';
 export const MAX_QUESTION_LENGTH = 1000;
@@ -113,4 +114,32 @@ export async function askClaude(input, anthropic = getClient()) {
     throw err;
   }
   return parsed;
+}
+
+// Conversación con Profe Búho IA (compañero de estudio).
+export async function chatWithClaude({ messages, age, levels }, anthropic = getClient()) {
+  if (!anthropic) {
+    const err = new Error('AI not configured');
+    err.code = 'ai_unavailable';
+    throw err;
+  }
+  const response = await anthropic.beta.messages.create({
+    model: process.env.CLAUDE_MODEL || DEFAULT_MODEL,
+    max_tokens: 4000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low' },
+    system: buddyRules({ age, levels }),
+    messages,
+  });
+  if (response.stop_reason === 'refusal') {
+    return '¡Uy! De eso no puedo hablar, pero me encanta ayudarte a estudiar. 🦉 ¿Repasamos algo de mates, lectura o inglés?';
+  }
+  const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  if (!text) {
+    const err = new Error('Empty reply');
+    err.code = 'bad_reply';
+    throw err;
+  }
+  return text;
 }

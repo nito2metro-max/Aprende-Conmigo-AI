@@ -3,7 +3,8 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { askClaude, aiAvailable, MAX_QUESTION_LENGTH } from './tutor-ai.js';
+import { askClaude, chatWithClaude, aiAvailable, MAX_QUESTION_LENGTH } from './tutor-ai.js';
+import { trimHistory, MAX_TURNS, MAX_MESSAGE } from './public/js/buddy.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(here, 'public');
@@ -56,7 +57,7 @@ async function serveStatic(req, res) {
   }
 }
 
-export function createAppServer({ tutor = askClaude, isAiAvailable = aiAvailable } = {}) {
+export function createAppServer({ tutor = askClaude, chat = chatWithClaude, isAiAvailable = aiAvailable } = {}) {
   const hits = new Map();
 
   function limited(ip) {
@@ -95,10 +96,53 @@ export function createAppServer({ tutor = askClaude, isAiAvailable = aiAvailable
     }
   }
 
+  async function handleChat(req, res) {
+    if (!isAiAvailable()) return sendJson(res, 503, { error: 'ai_unavailable' });
+    if (limited(req.socket.remoteAddress)) return sendJson(res, 429, { error: 'rate_limited' });
+
+    let body;
+    try {
+      body = JSON.parse(await readBody(req, 64 * 1024));
+    } catch (err) {
+      return sendJson(res, err.status || 400, { error: 'bad_request' });
+    }
+    if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > MAX_TURNS * 2) {
+      return sendJson(res, 400, { error: 'bad_messages' });
+    }
+    const last = body.messages.at(-1);
+    if (last?.role !== 'user' || String(last.content || '').length > MAX_MESSAGE) return sendJson(res, 400, { error: 'bad_messages' });
+
+    // Claude necesita turnos alternos: se unen los seguidos del mismo rol.
+    const messages = [];
+    for (const m of trimHistory(body.messages)) {
+      const prev = messages.at(-1);
+      if (prev && prev.role === m.role) prev.content += `\n${m.content}`;
+      else messages.push({ ...m });
+    }
+    if (!messages.length) return sendJson(res, 400, { error: 'bad_messages' });
+
+    const levels = {};
+    for (const key of ['math', 'reading', 'english']) {
+      const v = Number(body.levels?.[key]);
+      if (v >= 1 && v <= 5) levels[key] = Math.round(v);
+    }
+    try {
+      const reply = await chat({ messages, age: Math.min(14, Math.max(4, Number(body.age) || 8)), levels });
+      sendJson(res, 200, { source: 'ai', reply });
+    } catch (err) {
+      console.error('Error del chat:', err.message);
+      sendJson(res, 502, { error: err.code || 'chat_error' });
+    }
+  }
+
   return http.createServer(async (req, res) => {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (pathname === '/api/health' && req.method === 'GET') {
       return sendJson(res, 200, { ok: true, ai: isAiAvailable() });
+    }
+    if (pathname === '/api/chat') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });
+      return handleChat(req, res);
     }
     if (pathname === '/api/tutor') {
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method_not_allowed' });

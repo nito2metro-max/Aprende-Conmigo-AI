@@ -3,17 +3,40 @@
 const synth = globalThis.speechSynthesis;
 let rate = 0.9;
 let enabled = true;
+let preferredVoice = '';
+const listeners = new Set();
+let speakingCount = 0;
+
+// Avisa cuando la voz empieza o termina (la música baja mientras habla).
+export function onSpeaking(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function setSpeaking(delta) {
+  speakingCount = Math.max(0, speakingCount + delta);
+  for (const fn of listeners) fn(speakingCount > 0);
+}
 
 export const speechSupported = Boolean(synth && globalThis.SpeechSynthesisUtterance);
 
 export function configureSpeech(opts = {}) {
   if (opts.rate) rate = opts.rate;
   if (typeof opts.enabled === 'boolean') enabled = opts.enabled;
+  if (typeof opts.voice === 'string') preferredVoice = opts.voice;
+}
+
+// Voces disponibles en español, para elegir en la zona de padres.
+export function spanishVoices() {
+  if (!speechSupported) return [];
+  return synth.getVoices().filter((v) => v.lang.toLowerCase().startsWith('es'));
 }
 
 function findVoice(lang) {
   const voices = synth.getVoices();
   const prefix = lang.slice(0, 2);
+  const chosen = preferredVoice && voices.find((v) => v.voiceURI === preferredVoice && v.lang.startsWith(prefix));
+  if (chosen) return chosen;
   return (
     voices.find((v) => v.lang === lang && /natural|google|premium|enhanced/i.test(v.name)) ||
     voices.find((v) => v.lang === lang) ||
@@ -38,6 +61,7 @@ export function cleanForSpeech(text) {
 
 export function stopSpeaking() {
   if (speechSupported) synth.cancel();
+  if (speakingCount) setSpeaking(-speakingCount);
 }
 
 // Lee un texto. `onWord(charIndex)` se llama en cada palabra si el navegador
@@ -56,7 +80,13 @@ export function speak(text, { lang = 'es-ES', onWord, onEnd, slow = false } = {}
     const voice = findVoice(lang);
     if (voice) u.voice = voice;
     if (onWord) u.onboundary = (e) => { if (e.name === 'word' || e.name === undefined) onWord(e.charIndex); };
-    const done = () => { onEnd?.(); resolve(); };
+    let started = false;
+    u.onstart = () => { started = true; setSpeaking(1); };
+    const done = () => {
+      if (started) { started = false; setSpeaking(-1); }
+      onEnd?.();
+      resolve();
+    };
     u.onend = done;
     u.onerror = done;
     synth.speak(u);

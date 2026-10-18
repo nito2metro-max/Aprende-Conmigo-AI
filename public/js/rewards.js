@@ -22,6 +22,7 @@ export const BADGES = [
   { id: 'level3', emoji: '🌳', name: 'Creciendo', desc: 'Llega al nivel 3 en algo.', test: (p) => Object.values(p.skills).some((s) => s.level >= 3) },
   { id: 'level5', emoji: '🏆', name: 'Campeón', desc: 'Llega al nivel 5 en algo.', test: (p) => Object.values(p.skills).some((s) => s.level >= 5) },
   { id: 'gamer', emoji: '🎮', name: 'Jugador', desc: 'Juega 3 partidas.', test: (p) => (p.gamesPlayed || 0) >= 3 },
+  { id: 'buddy', emoji: '🦉', name: 'Amigo del búho', desc: 'Conversa 5 veces con Profe Búho IA.', test: (p) => (p.buddyAsked || 0) >= 5 },
   { id: 'homework', emoji: '📝', name: 'Tarea hecha', desc: 'Pide ayuda con una tarea.', test: (p) => (p.homeworkAsked || 0) >= 1 },
   { id: 'brave', emoji: '💪', name: 'Valiente', desc: 'Sigue intentando después de 10 errores.', test: (p) => p.history.filter((h) => !h.correct).length >= 10 },
   { id: 'days3', emoji: '📅', name: 'Constante', desc: 'Aprende 3 días distintos.', test: (p) => new Set(p.history.map((h) => new Date(h.t).toDateString())).size >= 3 },

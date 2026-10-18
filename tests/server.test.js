@@ -69,3 +69,30 @@ test('el mensaje al modelo no incluye datos personales', () => {
   assert.match(msg, /matemáticas/);
   assert.match(msg, /8 años/);
 });
+
+test('el chat de estudio valida la conversación y une turnos seguidos', async () => {
+  let received;
+  const chat = async (input) => {
+    received = input;
+    return '¡Hola! ¿Repasamos?';
+  };
+  await withServer({ isAiAvailable: () => true, chat }, async (base) => {
+    const post = (body) => fetch(`${base}/api/chat`, { method: 'POST', body: JSON.stringify(body) });
+    const ok = await post({
+      messages: [
+        { role: 'assistant', content: 'Bienvenida' },
+        { role: 'user', content: 'hola' },
+        { role: 'user', content: '¿me ayudas?' },
+      ],
+      age: 8,
+      levels: { math: 2, reading: 9, english: 'x' },
+    });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).reply, '¡Hola! ¿Repasamos?');
+    assert.deepEqual(received.messages, [{ role: 'user', content: 'hola\n¿me ayudas?' }]);
+    assert.deepEqual(received.levels, { math: 2 });
+    assert.equal((await post({ messages: [] })).status, 400);
+    assert.equal((await post({ messages: [{ role: 'assistant', content: 'x' }] })).status, 400);
+    assert.equal((await post({ messages: [{ role: 'user', content: 'a'.repeat(601) }] })).status, 400);
+  });
+});

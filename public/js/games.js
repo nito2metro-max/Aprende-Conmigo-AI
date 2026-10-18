@@ -6,14 +6,17 @@ import { shuffle, pick } from './random.js';
 import { esc, confetti } from './ui.js';
 
 export const GAMES = [
-  { id: 'race', emoji: '🚀', name: 'Carrera de cohetes', desc: 'Resuelve sumas y restas rápidas para llegar a la Luna.', subject: 'math' },
-  { id: 'memory', emoji: '🃏', name: 'Memoria en inglés', desc: 'Encuentra las parejas de dibujo y palabra.', subject: 'english' },
-  { id: 'balloons', emoji: '🎈', name: 'Globos de palabras', desc: 'Escucha la palabra y explota el globo correcto.', subject: 'reading' },
+  { id: 'race', emoji: '🚀', name: 'Carrera de cohetes', desc: 'Resuelve sumas y restas rápidas para llegar a la Luna.', subject: 'math',
+    rules: 'Carrera de cohetes. Resuelve 10 operaciones antes de que se acabe el tiempo. Cada respuesta correcta acerca tu cohete a la Luna. ¿Preparado? ¡Toca A jugar!' },
+  { id: 'memory', emoji: '🃏', name: 'Memoria en inglés', desc: 'Encuentra las parejas de dibujo y palabra.', subject: 'english',
+    rules: 'Memoria en inglés. Toca dos cartas. Si el dibujo y la palabra en inglés son pareja, se quedan abiertas. Escucha cómo se dice cada palabra. ¡Toca A jugar!' },
+  { id: 'balloons', emoji: '🎈', name: 'Globos de palabras', desc: 'Escucha la palabra y explota el globo correcto.', subject: 'reading',
+    rules: 'Globos de palabras. Escucha la palabra que te digo y explota el globo que la tiene escrita. Si no la oyes bien, toca Repetir. ¡Toca A jugar!' },
 ];
 
 // ---------- Carrera de cohetes ----------
 
-export function startRace(root, { level, onFinish }) {
+export function startRace(root, { level, onFinish, sfx = () => {} }) {
   const GOAL = 10;
   const SECONDS = 90;
   let done = 0;
@@ -47,6 +50,7 @@ export function startRace(root, { level, onFinish }) {
   function finish() {
     clearInterval(timer);
     const won = done >= GOAL;
+    sfx(won ? 'fanfare' : 'levelUp');
     if (won) confetti();
     onFinish({
       title: won ? '¡Llegaste a la Luna!' : '¡Buen viaje!',
@@ -60,12 +64,14 @@ export function startRace(root, { level, onFinish }) {
     if (!btn) return;
     if (btn.dataset.v === problem.answer) {
       done += 1;
+      sfx('whoosh');
       root.querySelector('#race-count').textContent = done;
       root.querySelector('#race-rocket').style.left = `${(done / GOAL) * 85}%`;
       if (done >= GOAL) return finish();
       next();
     } else {
       mistakes += 1;
+      sfx('wrong');
       btn.classList.add('wrong');
       btn.disabled = true;
     }
@@ -77,7 +83,7 @@ export function startRace(root, { level, onFinish }) {
 
 // ---------- Memoria en inglés ----------
 
-export function startMemory(root, { level, speak, onFinish }) {
+export function startMemory(root, { level, speak, onFinish, sfx = () => {} }) {
   const words = shuffle(vocabForLevel(Math.min(level, 3)), Math.random).slice(0, 6);
   const cards = shuffle(
     words.flatMap((w) => [
@@ -103,6 +109,7 @@ export function startMemory(root, { level, speak, onFinish }) {
     if (!btn || locked || btn.classList.contains('flipped')) return;
     const card = cards[Number(btn.dataset.i)];
     btn.classList.add('flipped');
+    sfx('flip');
     btn.setAttribute('aria-label', card.face);
     if (card.kind === 'word') speak(card.word.en, { lang: 'en-US' });
     open.push({ btn, card });
@@ -114,10 +121,12 @@ export function startMemory(root, { level, speak, onFinish }) {
     if (a.card.key === b.card.key && a.card.kind !== b.card.kind) {
       a.btn.classList.add('matched');
       b.btn.classList.add('matched');
+      sfx('correct');
       speak(`${a.card.word.en}. ${a.card.word.es}`, { lang: 'en-US' });
       open = [];
       matched += 1;
       if (matched === words.length) {
+        sfx('fanfare');
         confetti();
         timeout = setTimeout(() => onFinish({
           title: '¡Encontraste todas las parejas!',
@@ -148,7 +157,7 @@ export const BALLOON_WORDS = {
   3: ['mariposa', 'zapato', 'ventana', 'pelota', 'tortuga', 'bicicleta', 'escuela', 'guitarra', 'chocolate'],
 };
 
-export function startBalloons(root, { level, speak, onFinish }) {
+export function startBalloons(root, { level, speak, onFinish, sfx = () => {} }) {
   const ROUNDS = 8;
   const pool = BALLOON_WORDS[Math.min(3, Math.max(1, level - 1))] || BALLOON_WORDS[1];
   let round = 0;
@@ -164,6 +173,7 @@ export function startBalloons(root, { level, speak, onFinish }) {
   function next() {
     round += 1;
     if (round > ROUNDS) {
+      sfx(score >= ROUNDS - 1 ? 'fanfare' : 'levelUp');
       if (score >= ROUNDS - 1) confetti();
       onFinish({ title: '¡Fiesta de globos!', message: `Acertaste ${score} de ${ROUNDS} palabras.`, coins: score * 2 });
       return;
@@ -185,9 +195,11 @@ export function startBalloons(root, { level, speak, onFinish }) {
     root.querySelectorAll('.balloon').forEach((b) => { b.disabled = true; });
     if (btn.dataset.w === target) {
       score += 1;
+      sfx('pop');
       btn.classList.add('pop');
       speak('¡Muy bien!');
     } else {
+      sfx('wrong');
       btn.classList.add('wrong');
       root.querySelector(`.balloon[data-w="${CSS.escape(target)}"]`)?.classList.add('right');
       speak(`Era ${target}`);
